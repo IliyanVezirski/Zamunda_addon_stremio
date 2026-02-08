@@ -240,7 +240,7 @@ function getConfigurePage() {
         </div>
         
         <p class="info">Данните се използват само за вход и не се съхраняват на сървъра.</p>
-        <a href="https://buymeacoffee.com/Bgsubs" target="_blank" style="display:block; text-align:center; margin-top:18px; padding:12px 20px; background:linear-gradient(135deg,#ffdd00 0%,#f5a623 100%); color:#1a1a2e; text-decoration:none; border-radius:10px; font-weight:bold; font-size:14px; transition:transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">☕ Buy me a coffee</a>
+        <a href="https://buymeacoffee.com/Bgsubs" target="_blank" style="display:block; text-align:center; margin-top:18px; padding:12px 20px; background:linear-gradient(135deg,#ffdd00 0%,#f5a623 100%); color:#1a1a2e; text-decoration:none; border-radius:10px; font-weight:bold; font-size:14px; transition:transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">☕ Подкрепете проекта</a>
     </div>
 
     <script>
