@@ -11,7 +11,9 @@ const manifest = {
     id: 'org.zamunda.stremio.addon',
     version: '1.3.0',
     name: 'Zamunda',
-    description: 'Торенти от Zamunda.ch за Stremio | Подкрепете проекта: buymeacoffee.com/Bgsubs | Използването е на ваша отговорност',
+    description: 'Торенти от Zamunda.ch за Stremio. Използването е на ваша отговорност.',
+    // КЛЮЧЪТ: Това добавя кликаем бутон "Help" или "Donate" в Stremio
+    helpUrl: 'https://www.buymeacoffee.com/Bgsubs', 
     logo: `${process.env.RENDER_EXTERNAL_URL || 'https://zamunda-addon-stremio.onrender.com'}/static/logo.png`,
     resources: ['stream'],
     types: ['movie', 'series'],
@@ -21,12 +23,12 @@ const manifest = {
         {
             key: 'uid',
             type: 'text',
-            title: 'UID'
+            title: 'UID (от бисквитките)'
         },
         {
             key: 'pass',
             type: 'text',
-            title: 'Pass'
+            title: 'Pass (от бисквитките)'
         }
     ],
     behaviorHints: {
