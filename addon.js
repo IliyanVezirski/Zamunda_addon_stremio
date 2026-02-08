@@ -5,7 +5,7 @@ const { getMetaFromImdb, parseSeriesId, formatEpisode, sanitizeSearchQuery } = r
 
 const manifest = {
     id: 'org.zamunda.stremio.addon',
-    version: '1.0.0',
+    version: '1.1.0',
     name: 'Zamunda',
     description: 'Торенти от Zamunda.ch за Stremio',
     logo: 'https://i.imgur.com/wGXxPKV.png',
@@ -15,14 +15,14 @@ const manifest = {
     catalogs: [],
     config: [
         {
-            key: 'uid',
+            key: 'username',
             type: 'text',
-            title: 'Zamunda UID cookie'
+            title: 'Zamunda потребителско име'
         },
         {
-            key: 'pass',
+            key: 'password',
             type: 'password',
-            title: 'Zamunda pass cookie'
+            title: 'Zamunda парола'
         }
     ],
     behaviorHints: {
@@ -36,10 +36,11 @@ const builder = new addonBuilder(manifest);
 builder.defineStreamHandler(async ({ type, id, config }) => {
     console.log(`[Stream] type=${type} id=${id}`);
 
-    const uid = config?.uid;
-    const pass = config?.pass;
+    const username = config?.username;
+    const password = config?.password;
 
-    if (!uid || !pass) {
+    if (!username || !password) {
+        console.log('[Stream] Missing credentials');
         return { streams: [] };
     }
 
@@ -65,16 +66,20 @@ builder.defineStreamHandler(async ({ type, id, config }) => {
         console.log(`[Stream] Search: "${searchQuery}"`);
         searchQuery = sanitizeSearchQuery(searchQuery);
 
-        let streams = await getStreams(uid, pass, searchQuery, type);
+        let streams = await getStreams(username, password, searchQuery, type);
 
+        // Fallback: try without year for movies
         if (streams.length === 0 && type === 'movie' && meta?.year) {
-            streams = await getStreams(uid, pass, sanitizeSearchQuery(meta.name), type);
+            console.log('[Stream] Retrying without year...');
+            streams = await getStreams(username, password, sanitizeSearchQuery(meta.name), type);
         }
 
+        // Fallback: try season search for series
         if (streams.length === 0 && type === 'series') {
             const si = parseSeriesId(id);
             if (si) {
-                streams = await getStreams(uid, pass, sanitizeSearchQuery(`${meta.name} Season ${si.season}`), type);
+                console.log('[Stream] Retrying with season search...');
+                streams = await getStreams(username, password, sanitizeSearchQuery(`${meta.name} Season ${si.season}`), type);
             }
         }
 
