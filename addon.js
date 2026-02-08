@@ -11,7 +11,7 @@ const manifest = {
     id: 'org.zamunda.stremio.addon',
     version: '1.3.0',
     name: 'Zamunda',
-    description: 'Торенти от Zamunda.ch за Stremio',
+    description: 'Торенти от Zamunda.ch за Stremio | Donate: buymeacoffee.com/Bgsubs',
     logo: `${process.env.RENDER_EXTERNAL_URL || 'https://zamunda-addon-stremio.onrender.com'}/logo.png`,
     resources: ['stream'],
     types: ['movie', 'series'],
@@ -254,6 +254,7 @@ function getConfigurePage() {
         </div>
         
         <p class="info">Данните се използват само за вход и не се съхраняват на сървъра.</p>
+        <a href="https://buymeacoffee.com/Bgsubs" target="_blank" style="display:block; text-align:center; margin-top:18px; padding:12px 20px; background:linear-gradient(135deg,#ffdd00 0%,#f5a623 100%); color:#1a1a2e; text-decoration:none; border-radius:10px; font-weight:bold; font-size:14px; transition:transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">☕ Buy me a coffee</a>
     </div>
 
     <script>
