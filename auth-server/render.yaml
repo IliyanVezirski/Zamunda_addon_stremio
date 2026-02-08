@@ -1,0 +1,10 @@
+# Render.com Blueprint for Auth Server
+services:
+  - type: web
+    name: zamunda-auth
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: ADDON_URL
+        value: https://your-addon.beamup.dev  # Update this after Beamup deploy

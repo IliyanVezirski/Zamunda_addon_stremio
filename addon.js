@@ -1,6 +1,6 @@
 const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 
-const { getStreams, loginAndGetCookies } = require('./lib/zamundaService');
+const { getStreams } = require('./lib/zamundaService');
 const { getMetaFromImdb, parseSeriesId, formatEpisode, sanitizeSearchQuery } = require('./lib/utils');
 
 const manifest = {
@@ -15,14 +15,14 @@ const manifest = {
     catalogs: [],
     config: [
         {
-            key: 'username',
+            key: 'uid',
             type: 'text',
-            title: 'Zamunda потребителско име'
+            title: 'Zamunda UID cookie'
         },
         {
-            key: 'password',
+            key: 'pass',
             type: 'password',
-            title: 'Zamunda парола'
+            title: 'Zamunda pass cookie'
         }
     ],
     behaviorHints: {
@@ -36,17 +36,14 @@ const builder = new addonBuilder(manifest);
 builder.defineStreamHandler(async ({ type, id, config }) => {
     console.log(`[Stream] type=${type} id=${id}`);
 
-    const username = config?.username;
-    const password = config?.password;
+    const uid = config?.uid;
+    const pass = config?.pass;
 
-    if (!username || !password) {
+    if (!uid || !pass) {
         return { streams: [] };
     }
 
     try {
-        const cookies = await loginAndGetCookies(username, password);
-        if (!cookies) return { streams: [] };
-
         let searchQuery = '';
         let meta = null;
 
@@ -68,16 +65,16 @@ builder.defineStreamHandler(async ({ type, id, config }) => {
         console.log(`[Stream] Search: "${searchQuery}"`);
         searchQuery = sanitizeSearchQuery(searchQuery);
 
-        let streams = await getStreams(cookies, searchQuery, type);
+        let streams = await getStreams(uid, pass, searchQuery, type);
 
         if (streams.length === 0 && type === 'movie' && meta?.year) {
-            streams = await getStreams(cookies, sanitizeSearchQuery(meta.name), type);
+            streams = await getStreams(uid, pass, sanitizeSearchQuery(meta.name), type);
         }
 
         if (streams.length === 0 && type === 'series') {
             const si = parseSeriesId(id);
             if (si) {
-                streams = await getStreams(cookies, sanitizeSearchQuery(`${meta.name} Season ${si.season}`), type);
+                streams = await getStreams(uid, pass, sanitizeSearchQuery(`${meta.name} Season ${si.season}`), type);
             }
         }
 

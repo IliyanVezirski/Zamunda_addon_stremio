@@ -1,8 +1,0 @@
-services:
-  - type: web
-    name: zamunda-stremio
-    runtime: docker
-    plan: free
-    envVars:
-      - key: PORT
-        value: 7000
