@@ -1,1 +1,9 @@
 node_modules/
+auth-server/node_modules/
+*.png
+*.html
+debug-*.js
+debug-*.mjs
+check-login.js
+test.js
+.env

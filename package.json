@@ -1,18 +1,20 @@
 {
-  "name": "zamunda",
+  "name": "zamunda-stremio-addon",
   "version": "1.0.0",
-  "description": "Get started by customizing your environment (defined in the .idx/dev.nix file) with the tools and IDE extensions you'll need for your project!",
-  "main": "index.js",
+  "description": "Stremio addon - torrents from Zamunda.ch",
+  "main": "addon.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node addon.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
-    "axios": "^1.13.4",
-    "cheerio": "^1.2.0",
-    "express": "^5.2.1",
+    "axios": "^1.6.2",
+    "cheerio": "^1.0.0-rc.12",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "puppeteer-core": "^21.6.1",
     "stremio-addon-sdk": "^1.6.10"
   }
 }
