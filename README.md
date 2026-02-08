@@ -1,97 +1,73 @@
 # Zamunda Stremio Addon
 
-Stremio addon за торенти от Zamunda.ch - български торент тракер.
+![Zamunda](https://zamunda-addon-stremio.onrender.com/static/logo.png)
 
-## Архитектура
-
-Проектът се състои от две части:
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────┐
-│  Телефон/ТВ     │────>│  Auth сървър     │────>│  Zamunda.ch │
-│  (браузър)      │     │  (Render.com)    │     │             │
-└────────┬────────┘     └──────────────────┘     └─────────────┘
-         │                                              │
-         │  1. Въвежда user/pass                        │
-         │  2. Получава линк за Stremio                 │
-         │                                              │
-         v                                              v
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────┐
-│    Stremio      │────>│     Addon        │────>│  Zamunda.ch │
-│     App         │     │   (Beamup)       │     │  (торенти)  │
-└─────────────────┘     └──────────────────┘     └─────────────┘
-```
-
-1. **Auth сървър** (`auth-server/`) - Хостван на Render.com с Puppeteer за обход на Cloudflare
-2. **Addon** (root) - Хостван на Beamup, лек serverless
-
-## Инсталация за потребители
-
-1. Отвори [Auth сървъра](https://zamunda-auth.onrender.com) в браузъра
-2. Въведи Zamunda потребителско име и парола
-3. Натисни бутона за инсталация в Stremio
-4. Готово! Вече можеш да гледаш.
-
-## Deployment
-
-### 1. Addon (Beamup - безплатен)
-
-```bash
-npm install -g stremio-beamup-deploy
-cd Zamunda_addon_stremio
-beamup
-```
-
-Ще получиш URL като: `https://zamunda-addon.beamup.dev`
-
-### 2. Auth Server (Render.com - безплатен tier)
-
-1. Създай акаунт в [Render.com](https://render.com)
-2. New → Web Service → Connect GitHub repo
-3. Root Directory: `auth-server`
-4. Build Command: `npm install`
-5. Start Command: `npm start`
-6. Environment Variables:
-   - `ADDON_URL` = URL от Beamup (напр. `https://zamunda-addon.beamup.dev`)
-
-## Локално тестване
-
-```bash
-# Terminal 1: Addon
-npm install
-npm start
-# Работи на http://localhost:7000
-
-# Terminal 2: Auth Server
-cd auth-server
-npm install
-npm start
-# Работи на http://localhost:3000
-```
+Stremio addon за торенти от Zamunda.ch — гледайте филми и сериали директно в Stremio.
 
 ## Функции
 
-- ✅ Филми и сериали
-- ✅ Автоматично търсене по IMDB ID
-- ✅ Сезонни пакети за сериали
-- ✅ Качество (4K, 1080p, 720p)
-- ✅ Брой seeders
-- ✅ Обход на Cloudflare защита
+- Филми и сериали от Zamunda.ch
+- Автоматично търсене по IMDB ID
+- Показва качество на всеки торент (4K, 1080p, 720p, BluRay, WEB и др.)
+- Подреждане по качество и брой seeders
+- Стриктно филтриране — показва само точния филм, без грешни съвпадения
+- Само видео съдържание (без игри, музика, софтуер)
+- Кеширане на резултатите за по-бързо зареждане
+- Работи на телефон, компютър и телевизор
 
-## Структура на проекта
+## Инсталация
 
-```
-├── addon.js              # Главен Stremio addon
-├── lib/
-│   ├── sessionManager.js # Cookie management
-│   ├── zamundaService.js # Zamunda API
-│   └── utils.js          # Помощни функции
-├── auth-server/
-│   ├── server.js         # Auth сървър с Puppeteer
-│   ├── Dockerfile        # За Render.com
-│   └── package.json
-└── package.json
-```
+### Вариант 1: Чрез браузър (препоръчително)
+
+1. Отвори този линк в браузъра:
+
+   **https://zamunda-addon-stremio.onrender.com/configure**
+
+2. Въведи потребителското си име и парола за Zamunda
+3. Натисни **"Инсталирай в Stremio"**
+4. Stremio ще се отвори и ще добави addon-а автоматично
+5. Готово!
+
+### Вариант 2: Чрез manifest линк в Stremio
+
+1. Копирай този линк:
+
+   ```
+   https://zamunda-addon-stremio.onrender.com/manifest.json
+   ```
+
+2. Отвори Stremio → Addons → горе вдясно натисни **"Addon Repository URL"**
+3. Постави линка и натисни **Add**
+4. Stremio ще покаже бутон **"Configure"** — натисни го
+5. Ще се отвори браузърът за вход с Zamunda акаунта ти
+
+> Данните ти се използват само за вход в Zamunda и **не се съхраняват** на сървъра.
+
+## Как се ползва
+
+- Отвори Stremio и избери филм или сериал
+- Отиди в раздел **"Streams"**
+- Ще видиш торенти от Zamunda с информация за качество, размер и seeders
+- Избери торент и гледай
+
+## Поддържани устройства
+
+- Windows / macOS / Linux
+- Android / Android TV
+- Samsung TV / LG TV (чрез Stremio)
+- iOS (с ограничения)
+
+## Подкрепете проекта
+
+Ако addon-ът ви е полезен, можете да подкрепите разработката:
+
+[**☕ Подкрепете проекта**](https://buymeacoffee.com/Bgsubs)
+
+## Отказ от отговорност
+
+Този addon служи единствено като инструмент за достъп до торент съдържание от Zamunda.ch. Авторите **не носят отговорност** за гледане или разпространение на пиратско съдържание. Използването на addon-а е **изцяло на ваша отговорност**. Всеки потребител е длъжен да спазва законите в своята държава.
+
+Този проект не е свързан с или одобрен от Zamunda.ch.
 
 ## Лиценз
 
