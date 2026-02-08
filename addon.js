@@ -107,7 +107,12 @@ app.get('/', (req, res) => {
     res.redirect('/configure');
 });
 
-// Mount the SDK router
+// Redirect bare manifest.json to configure page (no cookies = need to login first)
+app.get('/manifest.json', (req, res) => {
+    res.redirect('/configure');
+});
+
+// Mount the SDK router (handles /:config/manifest.json and /:config/stream/...)
 const addonInterface = builder.getInterface();
 app.use(getRouter(addonInterface));
 
