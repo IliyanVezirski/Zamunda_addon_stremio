@@ -70,18 +70,27 @@ builder.defineStreamHandler(async ({ type, id, config }) => {
         console.log(`[Stream] Search: "${searchQuery}"`);
         searchQuery = sanitizeSearchQuery(searchQuery);
 
-        let streams = await getStreams(uid, pass, searchQuery, type);
+        const filter = { name: meta.name, year: meta.year || null };
+        if (type === 'series') {
+            const si = parseSeriesId(id);
+            if (si) {
+                filter.season = si.season;
+                filter.episode = si.episode;
+            }
+        }
+
+        let streams = await getStreams(uid, pass, searchQuery, type, filter);
 
         if (streams.length === 0 && type === 'movie' && meta?.year) {
             console.log('[Stream] Retrying without year...');
-            streams = await getStreams(uid, pass, sanitizeSearchQuery(meta.name), type);
+            streams = await getStreams(uid, pass, sanitizeSearchQuery(meta.name), type, filter);
         }
 
         if (streams.length === 0 && type === 'series') {
             const si = parseSeriesId(id);
             if (si) {
                 console.log('[Stream] Retrying with season search...');
-                streams = await getStreams(uid, pass, sanitizeSearchQuery(`${meta.name} Season ${si.season}`), type);
+                streams = await getStreams(uid, pass, sanitizeSearchQuery(`${meta.name} Season ${si.season}`), type, filter);
             }
         }
 
