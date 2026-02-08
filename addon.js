@@ -107,9 +107,12 @@ app.get('/', (req, res) => {
     res.redirect('/configure');
 });
 
-// Redirect bare manifest.json to configure page (no cookies = need to login first)
+// Serve manifest.json so Stremio can discover the addon
+// Stremio will see configurationRequired and show a Configure button
+// which opens /configure in the browser for login
 app.get('/manifest.json', (req, res) => {
-    res.redirect('/configure');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.end(JSON.stringify(manifest));
 });
 
 // Serve Zamunda logo (proxied through Worker)
