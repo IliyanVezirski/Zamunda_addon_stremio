@@ -12,7 +12,7 @@ const manifest = {
     version: '1.3.0',
     name: 'Zamunda',
     description: 'Торенти от Zamunda.ch за Stremio | Donate: buymeacoffee.com/Bgsubs',
-    logo: `${process.env.RENDER_EXTERNAL_URL || 'https://zamunda-addon-stremio.onrender.com'}/logo.png`,
+    logo: `${process.env.RENDER_EXTERNAL_URL || 'https://zamunda-addon-stremio.onrender.com'}/static/logo.png`,
     resources: ['stream'],
     types: ['movie', 'series'],
     idPrefixes: ['tt'],
@@ -115,25 +115,8 @@ app.get('/manifest.json', (req, res) => {
     res.end(JSON.stringify(manifest));
 });
 
-// Serve Zamunda logo (proxied through Worker)
-const axios = require('axios');
-let logoCache = null;
-app.get('/logo.png', async (req, res) => {
-    try {
-        if (!logoCache) {
-            const response = await axios.get(`${WORKER_URL}/?path=${encodeURIComponent('/pic/logo.png')}&cookies=none`, {
-                responseType: 'arraybuffer',
-                timeout: 15000
-            });
-            logoCache = Buffer.from(response.data);
-        }
-        res.setHeader('Content-Type', 'image/png');
-        res.setHeader('Cache-Control', 'public, max-age=604800');
-        res.end(logoCache);
-    } catch (e) {
-        res.status(404).end();
-    }
-});
+// Serve static files (logo)
+app.use('/static', express.static('static'));
 
 // Mount the SDK router (handles /:config/manifest.json and /:config/stream/...)
 const addonInterface = builder.getInterface();
@@ -229,7 +212,7 @@ function getConfigurePage() {
 </head>
 <body>
     <div class="container">
-        <div class="logo"><img src="/logo.png" alt="Zamunda"></div>
+        <div class="logo"><img src="/static/logo.png" alt="Zamunda"></div>
         <h1>Zamunda Addon</h1>
         <p class="subtitle">Торенти от Zamunda.ch за Stremio</p>
         
