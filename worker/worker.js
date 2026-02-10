@@ -144,7 +144,7 @@ export default {
                 headers: {
                     ...corsHeaders,
                     'Content-Type': 'text/html; charset=utf-8',
-                    'X-Worker-Version': '2.3.0',
+                    'X-Worker-Version': '2.3.1',
                     'X-Worker-Path': (path || '').substring(0, 100),
                     'X-Worker-Colo': request.cf?.colo || 'unknown',
                 }
@@ -185,29 +185,29 @@ async function handleLogin(url, baseUrl, targetKey, corsHeaders) {
         });
 
         // Cloudflare Workers: headers.get('set-cookie') returns ALL cookies joined with ', '
-        // We need to parse the combined string
         const rawCookies = response.headers.get('set-cookie') || '';
+        const bodyText = await response.text();
         
         let uid = '', pass = '';
         const uidMatch = rawCookies.match(/uid=(\d+)/);
-        const passMatch = rawCookies.match(/pass=([a-f0-9]{32})/);
+        const passMatch = rawCookies.match(/pass=([a-f0-9]{32})/i);
         
         if (uidMatch) uid = uidMatch[1];
         if (passMatch) pass = passMatch[1];
 
         if (uid && pass) {
-            return new Response(JSON.stringify({ uid, pass }), {
+            return new Response(JSON.stringify({ uid, pass, colo: request.cf?.colo || 'unknown' }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             });
         } else {
-            // Debug info when login fails
             return new Response(JSON.stringify({ 
                 error: 'Login failed — wrong credentials or no cookies returned',
                 debug: {
                     status: response.status,
+                    colo: request.cf?.colo || 'unknown',
                     rawCookies: rawCookies.substring(0, 500),
-                    uidMatch: uidMatch ? uidMatch[0] : null,
-                    passMatch: passMatch ? passMatch[0] : null
+                    bodySnippet: bodyText.substring(0, 300),
+                    allHeaders: Object.fromEntries([...response.headers.entries()].slice(0, 15))
                 }
             }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
