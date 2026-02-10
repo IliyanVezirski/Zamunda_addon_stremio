@@ -140,6 +140,45 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// AXELbg login endpoint — direct POST from Render server
+app.post('/api/axel-login', async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+        return res.json({ error: 'Missing username or password' });
+    }
+    try {
+        const axios = require('axios');
+        const loginRes = await axios.post('https://axelbg.net/takelogin.php',
+            `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+            },
+            maxRedirects: 0,
+            validateStatus: s => s >= 200 && s < 400,
+            timeout: 15000
+        });
+        const cookies = loginRes.headers['set-cookie'] || [];
+        let uid = '', pass = '';
+        for (const c of cookies) {
+            const u = c.match(/uid=(\d+)/);
+            const p = c.match(/pass=([a-f0-9]{32})/);
+            if (u) uid = u[1];
+            if (p) pass = p[1];
+        }
+        if (uid && pass) {
+            console.log(`[Axel Login] Success: uid=${uid}`);
+            res.json({ uid, pass });
+        } else {
+            console.log('[Axel Login] Failed — no cookies');
+            res.json({ error: 'Грешно потребителско име или парола' });
+        }
+    } catch (e) {
+        console.error('[Axel Login] Error:', e.message);
+        res.json({ error: e.message });
+    }
+});
+
 // Custom configure page
 app.get('/configure', (req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -279,17 +318,11 @@ function getConfigurePage() {
             
             <div id="axelFields" style="display:none; margin-bottom:14px; padding-left:28px;">
                 <div class="form-group">
-                    <p style="font-size:13px; color:#aaa; margin-bottom:12px;">
-                1. Влез в <a href="https://axelbg.net" target="_blank" style="color:#7c3aed;">axelbg.net</a><br>
-                2. Отвори DevTools (F12) → Application → Cookies<br>
-                3. Копирай <code style="background:#2a2a3e; padding:2px 6px; border-radius:3px;">uid</code> и <code style="background:#2a2a3e; padding:2px 6px; border-radius:3px;">pass</code> cookies
-            </p>
+                <label for="axelUsername" style="display:block; margin-bottom:5px; font-weight:500;">Потребителско име:</label>
+            <input type="text" id="axelUsername" placeholder="username" style="width:100%; padding:10px; border:1px solid #444; border-radius:6px; background:#2a2a3e; color:#fff; font-size:14px; margin-bottom:12px;">
             
-            <label for="axelUid" style="display:block; margin-bottom:5px; font-weight:500;">UID cookie:</label>
-            <input type="text" id="axelUid" placeholder="178816" style="width:100%; padding:10px; border:1px solid #444; border-radius:6px; background:#2a2a3e; color:#fff; font-size:14px; margin-bottom:12px;">
-            
-            <label for="axelPass" style="display:block; margin-bottom:5px; font-weight:500;">Pass cookie:</label>
-            <input type="text" id="axelPass" placeholder="08c770960f534f928a941fad6c68c75c" style="width:100%; padding:10px; border:1px solid #444; border-radius:6px; background:#2a2a3e; color:#fff; font-size:14px;">
+            <label for="axelPassword" style="display:block; margin-bottom:5px; font-weight:500;">Парола:</label>
+            <input type="password" id="axelPassword" placeholder="••••••••" style="width:100%; padding:10px; border:1px solid #444; border-radius:6px; background:#2a2a3e; color:#fff; font-size:14px;">
                 </div>
             </div>
             
@@ -347,16 +380,43 @@ function getConfigurePage() {
             const cfg = { providers: providers.join(',') };
             const btn = document.getElementById('installBtn');
             
-            // If AXELbg is checked, get uid/pass cookies
+            // If AXELbg is checked, login to get cookies
             if (providers.includes('axel')) {
-                const uid = document.getElementById('axelUid').value.trim();
-                const pass = document.getElementById('axelPass').value.trim();
-                if (!uid || !pass) {
-                    showStatus('Въведи AXELbg uid и pass cookies!', 'error');
+                const username = document.getElementById('axelUsername').value.trim();
+                const password = document.getElementById('axelPassword').value.trim();
+                if (!username || !password) {
+                    showStatus('Въведи потребителско име и парола за AXELbg!', 'error');
                     return;
                 }
-                cfg.axel_uid = uid;
-                cfg.axel_pass = pass;
+                
+                btn.disabled = true;
+                btn.textContent = 'Вход...';
+                showStatus('Влизане в AXELbg... Моля изчакай.', 'loading');
+                
+                try {
+                    const res = await fetch(BASE_URL + '/api/axel-login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+                    const data = await res.json();
+                    
+                    if (data.uid && data.pass) {
+                        showStatus('Успешен вход в AXELbg!', 'success');
+                        cfg.axel_uid = data.uid;
+                        cfg.axel_pass = data.pass;
+                    } else {
+                        showStatus(data.error || 'Грешно име или парола', 'error');
+                        btn.disabled = false;
+                        btn.textContent = 'Вход и инсталация';
+                        return;
+                    }
+                } catch (e) {
+                    showStatus('Грешка: ' + e.message, 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Вход и инсталация';
+                    return;
+                }
             }
             
             const config = encodeURIComponent(JSON.stringify(cfg));
