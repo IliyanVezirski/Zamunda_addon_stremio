@@ -150,7 +150,10 @@ app.post('/api/axel-login', async (req, res) => {
         const axios = require('axios');
         const loginBody = `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
         const loginRes = await axios.post('https://axelbg.net/takelogin.php', loginBody, {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+            },
             maxRedirects: 0,
             validateStatus: s => s >= 200 && s < 400,
             timeout: 10000
