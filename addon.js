@@ -140,31 +140,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// AXELbg login endpoint — routes through Cloudflare Worker
-app.post('/api/axel-login', async (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
-        return res.json({ error: 'Missing username or password' });
-    }
-    try {
-        const axios = require('axios');
-        const { WORKER_URL } = require('./lib/sessionManager');
-        const loginUrl = `${WORKER_URL}/login?target=axelbg.net&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
-        const loginRes = await axios.get(loginUrl, { timeout: 15000 });
-        const data = loginRes.data;
-        if (data.uid && data.pass) {
-            console.log(`[Axel Login] Success via Worker: uid=${data.uid}`);
-            res.json({ uid: data.uid, pass: data.pass });
-        } else {
-            console.log('[Axel Login] Failed:', data.error || 'no cookies');
-            res.json({ error: data.error || 'Wrong username or password' });
-        }
-    } catch (e) {
-        console.error('[Axel Login] Error:', e.message);
-        res.json({ error: e.message });
-    }
-});
-
 // Custom configure page
 app.get('/configure', (req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -304,12 +279,17 @@ function getConfigurePage() {
             
             <div id="axelFields" style="display:none; margin-bottom:14px; padding-left:28px;">
                 <div class="form-group">
-                    <label>\u041f\u043e\u0442\u0440\u0435\u0431\u0438\u0442\u0435\u043b\u0441\u043a\u043e \u0438\u043c\u0435</label>
-                    <input type="text" id="axelUsername" placeholder="AXELbg username" autocomplete="username">
-                </div>
-                <div class="form-group">
-                    <label>\u041f\u0430\u0440\u043e\u043b\u0430</label>
-                    <input type="password" id="axelPassword" placeholder="AXELbg password" autocomplete="current-password">
+                    <p style="font-size:13px; color:#aaa; margin-bottom:12px;">
+                1. Влез в <a href="https://axelbg.net" target="_blank" style="color:#7c3aed;">axelbg.net</a><br>
+                2. Отвори DevTools (F12) → Application → Cookies<br>
+                3. Копирай <code style="background:#2a2a3e; padding:2px 6px; border-radius:3px;">uid</code> и <code style="background:#2a2a3e; padding:2px 6px; border-radius:3px;">pass</code> cookies
+            </p>
+            
+            <label for="axelUid" style="display:block; margin-bottom:5px; font-weight:500;">UID cookie:</label>
+            <input type="text" id="axelUid" placeholder="178816" style="width:100%; padding:10px; border:1px solid #444; border-radius:6px; background:#2a2a3e; color:#fff; font-size:14px; margin-bottom:12px;">
+            
+            <label for="axelPass" style="display:block; margin-bottom:5px; font-weight:500;">Pass cookie:</label>
+            <input type="text" id="axelPass" placeholder="08c770960f534f928a941fad6c68c75c" style="width:100%; padding:10px; border:1px solid #444; border-radius:6px; background:#2a2a3e; color:#fff; font-size:14px;">
                 </div>
             </div>
             
@@ -367,43 +347,16 @@ function getConfigurePage() {
             const cfg = { providers: providers.join(',') };
             const btn = document.getElementById('installBtn');
             
-            // If AXELbg is checked, login to get cookies
+            // If AXELbg is checked, get uid/pass cookies
             if (providers.includes('axel')) {
-                const username = document.getElementById('axelUsername').value.trim();
-                const password = document.getElementById('axelPassword').value.trim();
-                if (!username || !password) {
-                    showStatus('\u0412\u044a\u0432\u0435\u0434\u0438 \u043f\u043e\u0442\u0440\u0435\u0431\u0438\u0442\u0435\u043b\u0441\u043a\u043e \u0438\u043c\u0435 \u0438 \u043f\u0430\u0440\u043e\u043b\u0430 \u0437\u0430 AXELbg!', 'error');
+                const uid = document.getElementById('axelUid').value.trim();
+                const pass = document.getElementById('axelPass').value.trim();
+                if (!uid || !pass) {
+                    showStatus('Въведи AXELbg uid и pass cookies!', 'error');
                     return;
                 }
-                
-                btn.disabled = true;
-                btn.textContent = '\u0412\u0445\u043e\u0434...';
-                showStatus('\u0412\u043b\u0438\u0437\u0430\u043d\u0435 \u0432 AXELbg... \u041c\u043e\u043b\u044f \u0438\u0437\u0447\u0430\u043a\u0430\u0439.', 'loading');
-                
-                try {
-                    const res = await fetch(BASE_URL + '/api/axel-login', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username, password })
-                    });
-                    const data = await res.json();
-                    
-                    if (data.uid && data.pass) {
-                        showStatus('\u0423\u0441\u043f\u0435\u0448\u0435\u043d \u0432\u0445\u043e\u0434 \u0432 AXELbg!', 'success');
-                        cfg.axel_uid = data.uid;
-                        cfg.axel_pass = data.pass;
-                    } else {
-                        showStatus('\u0413\u0440\u0435\u0448\u043d\u043e \u0438\u043c\u0435 \u0438\u043b\u0438 \u043f\u0430\u0440\u043e\u043b\u0430. ' + (data.error || ''), 'error');
-                        btn.disabled = false;
-                        btn.textContent = '\u0412\u0445\u043e\u0434 \u0438 \u0438\u043d\u0441\u0442\u0430\u043b\u0430\u0446\u0438\u044f';
-                        return;
-                    }
-                } catch (e) {
-                    showStatus('\u0413\u0440\u0435\u0448\u043a\u0430: ' + e.message, 'error');
-                    btn.disabled = false;
-                    btn.textContent = '\u0412\u0445\u043e\u0434 \u0438 \u0438\u043d\u0441\u0442\u0430\u043b\u0430\u0446\u0438\u044f';
-                    return;
-                }
+                cfg.axel_uid = uid;
+                cfg.axel_pass = pass;
             }
             
             const config = encodeURIComponent(JSON.stringify(cfg));

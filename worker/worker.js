@@ -125,28 +125,32 @@ async function handleLogin(url, baseUrl, targetKey, corsHeaders) {
             redirect: 'manual',
         });
 
-        const setCookies = response.headers.getAll?.('set-cookie') || [];
-        // Cloudflare Workers: headers.getAll may not exist, fallback
-        let cookieHeaders = setCookies;
-        if (cookieHeaders.length === 0) {
-            const raw = response.headers.get('set-cookie');
-            if (raw) cookieHeaders = raw.split(/,(?=\s*\w+=)/);
-        }
-
+        // Cloudflare Workers: headers.get('set-cookie') returns ALL cookies joined with ', '
+        // We need to parse the combined string
+        const rawCookies = response.headers.get('set-cookie') || '';
+        
         let uid = '', pass = '';
-        for (const c of cookieHeaders) {
-            const uidMatch = c.match(/uid=(\d+)/);
-            const passMatch = c.match(/pass=([a-f0-9]+)/);
-            if (uidMatch) uid = uidMatch[1];
-            if (passMatch) pass = passMatch[1];
-        }
+        const uidMatch = rawCookies.match(/uid=(\d+)/);
+        const passMatch = rawCookies.match(/pass=([a-f0-9]{32})/);
+        
+        if (uidMatch) uid = uidMatch[1];
+        if (passMatch) pass = passMatch[1];
 
         if (uid && pass) {
             return new Response(JSON.stringify({ uid, pass }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             });
         } else {
-            return new Response(JSON.stringify({ error: 'Login failed — wrong credentials or no cookies returned' }), {
+            // Debug info when login fails
+            return new Response(JSON.stringify({ 
+                error: 'Login failed — wrong credentials or no cookies returned',
+                debug: {
+                    status: response.status,
+                    rawCookies: rawCookies.substring(0, 500),
+                    uidMatch: uidMatch ? uidMatch[0] : null,
+                    passMatch: passMatch ? passMatch[0] : null
+                }
+            }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             });
         }
