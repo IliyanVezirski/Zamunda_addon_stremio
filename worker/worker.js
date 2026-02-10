@@ -45,9 +45,24 @@ export default {
         }
 
         // --- PROXY endpoint ---
-        const path = url.searchParams.get('path');
-        const cookies = url.searchParams.get('cookies') || '';
-        const binary = url.searchParams.get('binary') === '1';
+        // Extract params from raw URL to handle path values containing ? and &
+        const fullUrl = request.url;
+        let path = null, cookies = '', binary = false;
+        
+        // Extract path: everything between "path=" and "&cookies=" (or end of URL)
+        const pathMatch = fullUrl.match(/[?&]path=(.*?)(?:&cookies=|$)/);
+        if (pathMatch) {
+            path = decodeURIComponent(pathMatch[1]);
+        }
+        
+        // Extract cookies
+        const cookiesMatch = fullUrl.match(/[?&]cookies=(.*?)(?:&binary=|$)/);
+        if (cookiesMatch) {
+            cookies = decodeURIComponent(cookiesMatch[1]);
+        }
+        
+        // Extract binary flag
+        binary = fullUrl.includes('binary=1');
 
         if (!path) {
             return new Response(JSON.stringify({ error: 'Missing path parameter' }), {

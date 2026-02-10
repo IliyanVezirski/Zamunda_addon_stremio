@@ -9,7 +9,7 @@ const { getMetaFromImdb, parseSeriesId, formatEpisode, sanitizeSearchQuery } = r
 
 const manifest = {
     id: 'org.zamunda.stremio.addon',
-    version: '2.2.0',
+    version: '2.2.1',
     name: 'BGTorrents',
     description: 'Торенти от Zamunda.rip + AXELbg за Stremio. Използването е на ваша отговорност.',
     // КЛЮЧЪТ: Това добавя кликаем бутон "Help" или "Donate" в Stremio
