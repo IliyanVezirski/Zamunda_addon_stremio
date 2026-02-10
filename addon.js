@@ -2,16 +2,16 @@ const express = require('express');
 const cors = require('cors');
 const { addonBuilder, getRouter } = require('stremio-addon-sdk');
 
-const { getStreams } = require('./lib/zamundaService');
+// const { getStreams: getZamundaStreams } = require('./lib/zamundaService'); // zamunda.ch — не работи в момента
+const { getStreams: getRipStreams } = require('./lib/zamundaRipService');
+const { getStreams: getAxelStreams } = require('./lib/axelService');
 const { getMetaFromImdb, parseSeriesId, formatEpisode, sanitizeSearchQuery } = require('./lib/utils');
-
-const WORKER_URL = process.env.WORKER_URL || 'https://zamunda-proxy.ilian-vezirski.workers.dev';
 
 const manifest = {
     id: 'org.zamunda.stremio.addon',
-    version: '1.3.0',
-    name: 'Zamunda',
-    description: 'Торенти от Zamunda.ch за Stremio. Използването е на ваша отговорност.',
+    version: '2.1.0',
+    name: 'BGTorrents',
+    description: 'Торенти от Zamunda.rip + AXELbg за Stremio. Използването е на ваша отговорност.',
     // КЛЮЧЪТ: Това добавя кликаем бутон "Help" или "Donate" в Stremio
     helpUrl: 'https://www.buymeacoffee.com/Bgsubs', 
     logo: `${process.env.RENDER_EXTERNAL_URL || 'https://zamunda-addon-stremio.onrender.com'}/static/logo.png`,
@@ -21,19 +21,24 @@ const manifest = {
     catalogs: [],
     config: [
         {
-            key: 'uid',
+            key: 'providers',
             type: 'text',
-            title: 'UID (от бисквитките)'
+            title: 'Източници (rip,axel)'
         },
         {
-            key: 'pass',
+            key: 'axel_uid',
             type: 'text',
-            title: 'Pass (от бисквитките)'
+            title: 'AXELbg UID'
+        },
+        {
+            key: 'axel_pass',
+            type: 'text',
+            title: 'AXELbg Pass'
         }
     ],
     behaviorHints: {
         configurable: true,
-        configurationRequired: true
+        configurationRequired: false
     }
 };
 
@@ -42,29 +47,31 @@ const builder = new addonBuilder(manifest);
 builder.defineStreamHandler(async ({ type, id, config }) => {
     console.log(`[Stream] type=${type} id=${id}`);
 
-    const uid = config?.uid;
-    const pass = config?.pass;
-
-    if (!uid || !pass) {
-        console.log('[Stream] Missing cookies in config');
-        return { streams: [] };
-    }
+    // Providers: from config URL or env vars
+    const enabledProviders = (config?.providers || process.env.PROVIDERS || 'rip').split(',').map(s => s.trim());
+    const useRip = enabledProviders.includes('rip');
+    const axelUid = config?.axel_uid || process.env.AXEL_UID || '';
+    const axelPass = config?.axel_pass || process.env.AXEL_PASS || '';
+    const useAxel = enabledProviders.includes('axel') && axelUid && axelPass;
 
     try {
         let searchQuery = '';
         let meta = null;
+        let imdbId = id;
 
         if (type === 'movie') {
             meta = await getMetaFromImdb('movie', id);
             if (!meta) return { streams: [] };
             searchQuery = meta.name;
             if (meta.year) searchQuery += ` ${meta.year}`;
+            imdbId = id;
         } else if (type === 'series') {
             const seriesInfo = parseSeriesId(id);
             if (!seriesInfo) return { streams: [] };
             meta = await getMetaFromImdb('series', seriesInfo.imdbId);
             if (!meta) return { streams: [] };
             searchQuery = `${meta.name} ${formatEpisode(seriesInfo.season, seriesInfo.episode)}`;
+            imdbId = seriesInfo.imdbId;
         } else {
             return { streams: [] };
         }
@@ -81,23 +88,47 @@ builder.defineStreamHandler(async ({ type, id, config }) => {
             }
         }
 
-        let streams = await getStreams(uid, pass, searchQuery, type, filter);
+        // Run enabled providers in parallel
+        const promises = [];
 
-        if (streams.length === 0 && type === 'movie' && meta?.year) {
-            console.log('[Stream] Retrying without year...');
-            streams = await getStreams(uid, pass, sanitizeSearchQuery(meta.name), type, filter);
+        // 1. Zamunda.rip (no login needed)
+        if (useRip) {
+            promises.push(
+                (async () => {
+                    let streams = await getRipStreams(searchQuery, type, filter);
+                    if (streams.length === 0 && type === 'movie' && meta?.year) {
+                        streams = await getRipStreams(sanitizeSearchQuery(meta.name), type, filter);
+                    }
+                    if (streams.length === 0 && type === 'series') {
+                        const si = parseSeriesId(id);
+                        if (si) streams = await getRipStreams(sanitizeSearchQuery(`${meta.name} Season ${si.season}`), type, filter);
+                    }
+                    return streams;
+                })().catch(e => { console.error('[Stream] Rip error:', e.message); return []; })
+            );
         }
 
-        if (streams.length === 0 && type === 'series') {
-            const si = parseSeriesId(id);
-            if (si) {
-                console.log('[Stream] Retrying with season search...');
-                streams = await getStreams(uid, pass, sanitizeSearchQuery(`${meta.name} Season ${si.season}`), type, filter);
-            }
+        // 2. AXELbg (needs credentials)
+        if (useAxel) {
+            promises.push(
+                getAxelStreams(axelUid, axelPass, imdbId, type, filter)
+                    .catch(e => { console.error('[Stream] Axel error:', e.message); return []; })
+            );
         }
 
-        console.log(`[Stream] Found ${streams.length} streams`);
-        return { streams };
+        const results = await Promise.all(promises);
+        const streams = results.flat();
+
+        // Deduplicate by infoHash
+        const seen = new Set();
+        const unique = streams.filter(s => {
+            if (seen.has(s.infoHash)) return false;
+            seen.add(s.infoHash);
+            return true;
+        });
+
+        console.log(`[Stream] Found ${unique.length} streams (${results[0]?.length || 0} rip + ${results[1]?.length || 0} axel)`);
+        return { streams: unique };
     } catch (error) {
         console.error(`[Stream] Error:`, error.message);
         return { streams: [] };
@@ -107,8 +138,45 @@ builder.defineStreamHandler(async ({ type, id, config }) => {
 // Build Express app with custom configure page
 const app = express();
 app.use(cors());
+app.use(express.json());
 
-// Custom configure page - login happens in the USER's browser
+// AXELbg login endpoint — accepts username/password, returns uid/pass cookies
+app.post('/api/axel-login', async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+        return res.json({ error: 'Missing username or password' });
+    }
+    try {
+        const axios = require('axios');
+        const loginBody = `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+        const loginRes = await axios.post('https://axelbg.net/takelogin.php', loginBody, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            maxRedirects: 0,
+            validateStatus: s => s >= 200 && s < 400,
+            timeout: 10000
+        });
+        const cookies = loginRes.headers['set-cookie'] || [];
+        let uid = '', pass = '';
+        for (const c of cookies) {
+            const uidMatch = c.match(/uid=(\d+)/);
+            const passMatch = c.match(/pass=([a-f0-9]+)/);
+            if (uidMatch) uid = uidMatch[1];
+            if (passMatch) pass = passMatch[1];
+        }
+        if (uid && pass) {
+            console.log(`[Axel Login] Success: uid=${uid}`);
+            res.json({ uid, pass });
+        } else {
+            console.log('[Axel Login] Failed — no cookies');
+            res.json({ error: 'Wrong username or password' });
+        }
+    } catch (e) {
+        console.error('[Axel Login] Error:', e.message);
+        res.json({ error: e.message });
+    }
+});
+
+// Custom configure page
 app.get('/configure', (req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.end(getConfigurePage());
@@ -118,9 +186,6 @@ app.get('/', (req, res) => {
     res.redirect('/configure');
 });
 
-// Serve manifest.json so Stremio can discover the addon
-// Stremio will see configurationRequired and show a Configure button
-// which opens /configure in the browser for login
 app.get('/manifest.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.end(JSON.stringify(manifest));
@@ -146,7 +211,7 @@ function getConfigurePage() {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zamunda Stremio Addon</title>
+    <title>BGTorrents Stremio Addon</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -223,81 +288,75 @@ function getConfigurePage() {
 </head>
 <body>
     <div class="container">
-        <div class="logo"><img src="/static/logo.png" alt="Zamunda"></div>
-        <h1>Zamunda Addon</h1>
-        <p class="subtitle">Торенти от Zamunda.ch за Stremio</p>
+        <div class="logo"><img src="/static/logo.png" alt="BGTorrents"></div>
+        <h1>BGTorrents Addon</h1>
+        <p class="subtitle">BG \u0442\u043e\u0440\u0435\u043d\u0442\u0438 \u0437\u0430 Stremio</p>
         
-        <div id="loginForm">
-            <div class="form-group">
-                <label>Потребителско име</label>
-                <input type="text" id="username" placeholder="Username" autocomplete="username">
+        <div id="configForm">
+            <p style="color: #ccc; margin-bottom: 16px; font-size: 13px;">\u0418\u0437\u0431\u0435\u0440\u0438 \u0438\u0437\u0442\u043e\u0447\u043d\u0438\u0446\u0438:</p>
+            
+            <label style="display:flex; align-items:center; gap:10px; padding:12px; background:rgba(255,255,255,0.05); border-radius:10px; margin-bottom:10px; cursor:pointer;">
+                <input type="checkbox" id="cbRip" checked style="width:18px; height:18px; accent-color:#667eea;">
+                <div>
+                    <span style="color:#fff; font-weight:bold;">Zamunda.rip</span>
+                    <span style="color:#4ade80; font-size:12px; margin-left:6px;">\u0431\u0435\u0437 \u043b\u043e\u0433\u0438\u043d</span>
+                    <br><span style="color:#888; font-size:11px;">\u0410\u0440\u0445\u0438\u0432 \u043d\u0430 Zamunda + ArenaBG (400k+ \u0442\u043e\u0440\u0435\u043d\u0442\u0430)</span>
+                </div>
+            </label>
+            
+            <label style="display:flex; align-items:center; gap:10px; padding:12px; background:rgba(255,255,255,0.05); border-radius:10px; margin-bottom:10px; cursor:pointer;">
+                <input type="checkbox" id="cbAxel" onchange="toggleAxelFields()" style="width:18px; height:18px; accent-color:#667eea;">
+                <div>
+                    <span style="color:#fff; font-weight:bold;">AXELbg.net</span>
+                    <span style="color:#f5a623; font-size:12px; margin-left:6px;">\u0438\u0437\u0438\u0441\u043a\u0432\u0430 \u0430\u043a\u0430\u0443\u043d\u0442</span>
+                    <br><span style="color:#888; font-size:11px;">\u0411\u044a\u043b\u0433\u0430\u0440\u0441\u043a\u0438 \u0442\u0440\u0430\u043a\u0435\u0440 \u0441 \u0430\u043a\u0442\u0438\u0432\u043d\u0438 seeders</span>
+                </div>
+            </label>
+            
+            <div id="axelFields" style="display:none; margin-bottom:14px; padding-left:28px;">
+                <div class="form-group">
+                    <label>\u041f\u043e\u0442\u0440\u0435\u0431\u0438\u0442\u0435\u043b\u0441\u043a\u043e \u0438\u043c\u0435</label>
+                    <input type="text" id="axelUsername" placeholder="AXELbg username" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label>\u041f\u0430\u0440\u043e\u043b\u0430</label>
+                    <input type="password" id="axelPassword" placeholder="AXELbg password" autocomplete="current-password">
+                </div>
             </div>
-            <div class="form-group">
-                <label>Парола</label>
-                <input type="password" id="password" placeholder="Password" autocomplete="current-password">
-            </div>
-            <button id="loginBtn" onclick="doLogin()">Вход и инсталация</button>
+            
+            <label style="display:flex; align-items:center; gap:10px; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px; margin-bottom:14px; cursor:not-allowed; opacity:0.4;">
+                <input type="checkbox" disabled style="width:18px; height:18px;">
+                <div>
+                    <span style="color:#888; font-weight:bold;">Zamunda.ch</span>
+                    <span style="color:#ff6b6b; font-size:12px; margin-left:6px;">\u26a0\ufe0f \u041d\u0415 \u0420\u0410\u0411\u041e\u0422\u0418</span>
+                    <br><span style="color:#666; font-size:11px;">\u0429\u0435 \u0431\u044a\u0434\u0435 \u0432\u044a\u0437\u0441\u0442\u0430\u043d\u043e\u0432\u0435\u043d \u043a\u043e\u0433\u0430\u0442\u043e \u0441\u044a\u0440\u0432\u044a\u0440\u044a\u0442 \u0437\u0430\u0440\u0430\u0431\u043e\u0442\u0438</span>
+                </div>
+            </label>
+            
+            <button id="installBtn" onclick="doInstall()">\u0412\u0445\u043e\u0434 \u0438 \u0438\u043d\u0441\u0442\u0430\u043b\u0430\u0446\u0438\u044f</button>
         </div>
-        
+
         <div class="status" id="status"></div>
         
         <div class="install-section" id="installSection">
-            <a class="install-btn" id="installLink" href="#">Инсталирай в Stremio</a>
+            <a class="install-btn" id="installLink" href="#">\u0418\u043d\u0441\u0442\u0430\u043b\u0438\u0440\u0430\u0439 \u0432 Stremio</a>
             <p style="color: #aaa; margin-top: 12px; font-size: 12px;">
-                Или копирай линка:<br>
+                \u0418\u043b\u0438 \u043a\u043e\u043f\u0438\u0440\u0430\u0439 \u043b\u0438\u043d\u043a\u0430:<br>
                 <input type="text" id="manifestUrl" readonly onclick="this.select()" 
                     style="margin-top: 8px; background: rgba(0,0,0,0.3); border: none; color: #aaa; font-size: 11px; padding: 10px; width: 100%; cursor: pointer;">
             </p>
         </div>
         
-        <p class="info">Данните се използват само за вход и не се съхраняват на сървъра.</p>
-        <a href="https://buymeacoffee.com/Bgsubs" target="_blank" style="display:block; text-align:center; margin-top:18px; padding:12px 20px; background:linear-gradient(135deg,#ffdd00 0%,#f5a623 100%); color:#1a1a2e; text-decoration:none; border-radius:10px; font-weight:bold; font-size:14px; transition:transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">☕ Подкрепете проекта</a>
+        <p class="info">\u0414\u0430\u043d\u043d\u0438\u0442\u0435 \u0441\u0435 \u0438\u0437\u043f\u043e\u043b\u0437\u0432\u0430\u0442 \u0441\u0430\u043c\u043e \u0437\u0430 \u0432\u0445\u043e\u0434 \u0438 \u043d\u0435 \u0441\u0435 \u0441\u044a\u0445\u0440\u0430\u043d\u044f\u0432\u0430\u0442 \u043d\u0430 \u0441\u044a\u0440\u0432\u044a\u0440\u0430.</p>
+        <a href="https://buymeacoffee.com/Bgsubs" target="_blank" style="display:block; text-align:center; margin-top:18px; padding:12px 20px; background:linear-gradient(135deg,#ffdd00 0%,#f5a623 100%); color:#1a1a2e; text-decoration:none; border-radius:10px; font-weight:bold; font-size:14px; transition:transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">\u2615 \u041f\u043e\u0434\u043a\u0440\u0435\u043f\u0435\u0442\u0435 \u043f\u0440\u043e\u0435\u043a\u0442\u0430</a>
     </div>
 
     <script>
-        const WORKER_URL = '${WORKER_URL}';
         const BASE_URL = '${baseUrl}';
         
-        async function doLogin() {
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value.trim();
-            
-            if (!username || !password) {
-                showStatus('Въведи потребителско име и парола', 'error');
-                return;
-            }
-            
-            const btn = document.getElementById('loginBtn');
-            btn.disabled = true;
-            btn.textContent = 'Вход...';
-            showStatus('Влизане в Zamunda... Моля изчакай.', 'loading');
-            
-            try {
-                const loginUrl = WORKER_URL + '/login?username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password);
-                const response = await fetch(loginUrl);
-                const data = await response.json();
-                
-                if (data.uid && data.pass) {
-                    showStatus('Успешен вход!', 'success');
-                    
-                    const config = encodeURIComponent(JSON.stringify({ uid: data.uid, pass: data.pass }));
-                    const manifestUrl = BASE_URL + '/' + config + '/manifest.json';
-                    const stremioUrl = 'stremio://' + manifestUrl.replace(/^https?:\\/\\//, '') ;
-                    
-                    document.getElementById('installLink').href = stremioUrl;
-                    document.getElementById('manifestUrl').value = manifestUrl;
-                    document.getElementById('installSection').style.display = 'block';
-                    document.getElementById('loginForm').style.display = 'none';
-                } else {
-                    showStatus('Грешно потребителско име или парола. ' + (data.error || ''), 'error');
-                    btn.disabled = false;
-                    btn.textContent = 'Вход и инсталация';
-                }
-            } catch (e) {
-                showStatus('Грешка: ' + e.message, 'error');
-                btn.disabled = false;
-                btn.textContent = 'Вход и инсталация';
-            }
+        function toggleAxelFields() {
+            document.getElementById('axelFields').style.display = 
+                document.getElementById('cbAxel').checked ? 'block' : 'none';
         }
         
         function showStatus(msg, type) {
@@ -306,9 +365,71 @@ function getConfigurePage() {
             el.className = 'status ' + type;
         }
         
-        // Allow Enter key to submit
-        document.getElementById('password').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') doLogin();
+        async function doInstall() {
+            const providers = [];
+            if (document.getElementById('cbRip').checked) providers.push('rip');
+            if (document.getElementById('cbAxel').checked) providers.push('axel');
+            
+            if (providers.length === 0) {
+                showStatus('\u0418\u0437\u0431\u0435\u0440\u0438 \u043f\u043e\u043d\u0435 \u0435\u0434\u0438\u043d \u0438\u0437\u0442\u043e\u0447\u043d\u0438\u043a!', 'error');
+                return;
+            }
+            
+            const cfg = { providers: providers.join(',') };
+            const btn = document.getElementById('installBtn');
+            
+            // If AXELbg is checked, login to get cookies
+            if (providers.includes('axel')) {
+                const username = document.getElementById('axelUsername').value.trim();
+                const password = document.getElementById('axelPassword').value.trim();
+                if (!username || !password) {
+                    showStatus('\u0412\u044a\u0432\u0435\u0434\u0438 \u043f\u043e\u0442\u0440\u0435\u0431\u0438\u0442\u0435\u043b\u0441\u043a\u043e \u0438\u043c\u0435 \u0438 \u043f\u0430\u0440\u043e\u043b\u0430 \u0437\u0430 AXELbg!', 'error');
+                    return;
+                }
+                
+                btn.disabled = true;
+                btn.textContent = '\u0412\u0445\u043e\u0434...';
+                showStatus('\u0412\u043b\u0438\u0437\u0430\u043d\u0435 \u0432 AXELbg... \u041c\u043e\u043b\u044f \u0438\u0437\u0447\u0430\u043a\u0430\u0439.', 'loading');
+                
+                try {
+                    const res = await fetch(BASE_URL + '/api/axel-login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+                    const data = await res.json();
+                    
+                    if (data.uid && data.pass) {
+                        showStatus('\u0423\u0441\u043f\u0435\u0448\u0435\u043d \u0432\u0445\u043e\u0434 \u0432 AXELbg!', 'success');
+                        cfg.axel_uid = data.uid;
+                        cfg.axel_pass = data.pass;
+                    } else {
+                        showStatus('\u0413\u0440\u0435\u0448\u043d\u043e \u0438\u043c\u0435 \u0438\u043b\u0438 \u043f\u0430\u0440\u043e\u043b\u0430. ' + (data.error || ''), 'error');
+                        btn.disabled = false;
+                        btn.textContent = '\u0412\u0445\u043e\u0434 \u0438 \u0438\u043d\u0441\u0442\u0430\u043b\u0430\u0446\u0438\u044f';
+                        return;
+                    }
+                } catch (e) {
+                    showStatus('\u0413\u0440\u0435\u0448\u043a\u0430: ' + e.message, 'error');
+                    btn.disabled = false;
+                    btn.textContent = '\u0412\u0445\u043e\u0434 \u0438 \u0438\u043d\u0441\u0442\u0430\u043b\u0430\u0446\u0438\u044f';
+                    return;
+                }
+            }
+            
+            const config = encodeURIComponent(JSON.stringify(cfg));
+            const manifestUrl = BASE_URL + '/' + config + '/manifest.json';
+            const stremioUrl = 'stremio://' + manifestUrl.replace(/^https?:\\/\\//, '');
+            
+            document.getElementById('installLink').href = stremioUrl;
+            document.getElementById('manifestUrl').value = manifestUrl;
+            document.getElementById('installSection').style.display = 'block';
+            document.getElementById('configForm').style.display = 'none';
+        }
+        
+        // Enter key submits
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') doInstall();
         });
     </script>
 </body>
