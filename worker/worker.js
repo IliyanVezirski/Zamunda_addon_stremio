@@ -93,6 +93,35 @@ export default {
                 headers['Cookie'] = cookies;
             }
 
+            // Warm-up: visit index.php first to update lastip and init session
+            // This fixes SQL Error on non-SOF edges where $CURUSER doesn't load
+            if (targetKey === 'axelbg.net' && !binary && cookies) {
+                console.log('[Worker] Warm-up: visiting index.php to init session...');
+                const warmup = await fetch(baseUrl + '/index.php', {
+                    headers: { ...headers },
+                    redirect: 'follow',
+                });
+                // Extract any session cookies from warm-up response
+                const setCookies = warmup.headers.get('set-cookie') || '';
+                if (setCookies) {
+                    // Merge session cookies with auth cookies
+                    const sessionCookies = [];
+                    const cookieParts = setCookies.split(/,\s*(?=[a-zA-Z_]+=)/);
+                    for (const part of cookieParts) {
+                        const nameVal = part.split(';')[0].trim();
+                        if (nameVal && !nameVal.startsWith('uid=') && !nameVal.startsWith('pass=')) {
+                            sessionCookies.push(nameVal);
+                        }
+                    }
+                    if (sessionCookies.length > 0) {
+                        headers['Cookie'] = cookies + '; ' + sessionCookies.join('; ');
+                        console.log(`[Worker] Merged session cookies: ${sessionCookies.join('; ').substring(0, 80)}`);
+                    }
+                }
+                await warmup.text(); // consume body
+                console.log(`[Worker] Warm-up done, status=${warmup.status}`);
+            }
+
             const response = await fetch(targetUrl, {
                 headers,
                 redirect: 'follow',
