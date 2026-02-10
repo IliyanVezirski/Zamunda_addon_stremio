@@ -140,7 +140,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// AXELbg login endpoint — through Worker for IP match (like zamunda.ch)
+// AXELbg login endpoint — direct POST from Render (Worker gives SQL Error from FRA/DUS edges)
 app.post('/api/axel-login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -148,21 +148,33 @@ app.post('/api/axel-login', async (req, res) => {
     }
     try {
         const axios = require('axios');
-        const { WORKER_URL } = require('./lib/sessionManager');
-        const workerLoginUrl = `${WORKER_URL}/login?target=axelbg.net&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
-        console.log(`[Axel Login] Via Worker: ${WORKER_URL}/login?target=axelbg.net`);
-        const loginRes = await axios.get(workerLoginUrl, { timeout: 20000, validateStatus: () => true });
-        const data = loginRes.data;
-        console.log(`[Axel Login] Worker response:`, JSON.stringify(data).substring(0, 500));
-        if (data.uid && data.pass) {
-            console.log(`[Axel Login] Success via Worker: uid=${data.uid}`);
-            res.json({ uid: data.uid, pass: data.pass });
+        const loginRes = await axios.post('https://axelbg.net/takelogin.php',
+            `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+            },
+            maxRedirects: 0,
+            validateStatus: s => s >= 200 && s < 400,
+            timeout: 15000
+        });
+        const cookies = loginRes.headers['set-cookie'] || [];
+        let uid = '', pass = '';
+        for (const c of cookies) {
+            const u = c.match(/uid=(\d+)/);
+            const p = c.match(/pass=([a-f0-9]{32})/);
+            if (u) uid = u[1];
+            if (p) pass = p[1];
+        }
+        if (uid && pass) {
+            console.log(`[Axel Login] Success: uid=${uid}`);
+            res.json({ uid, pass });
         } else {
-            console.log('[Axel Login] Failed via Worker:', JSON.stringify(data));
-            res.json({ error: data.error || 'Грешно потребителско име или парола' });
+            console.log('[Axel Login] Failed — no cookies');
+            res.json({ error: 'Грешно потребителско име или парола' });
         }
     } catch (e) {
-        console.error('[Axel Login] Worker error:', e.message);
+        console.error('[Axel Login] Error:', e.message);
         res.json({ error: e.message });
     }
 });
