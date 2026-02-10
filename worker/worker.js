@@ -41,7 +41,7 @@ export default {
 
         // --- LOGIN endpoint ---
         if (url.pathname === '/login') {
-            return handleLogin(url, baseUrl, targetKey, corsHeaders);
+            return handleLogin(url, baseUrl, targetKey, corsHeaders, request);
         }
 
         // --- PROXY endpoint ---
@@ -158,7 +158,7 @@ export default {
     }
 };
 
-async function handleLogin(url, baseUrl, targetKey, corsHeaders) {
+async function handleLogin(url, baseUrl, targetKey, corsHeaders, request) {
     const username = url.searchParams.get('username');
     const password = url.searchParams.get('password');
 
