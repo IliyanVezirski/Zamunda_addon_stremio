@@ -78,8 +78,11 @@ export default {
             console.log(`[Worker] cookies: ${cookies.substring(0, 50)}`);
             const headers = {
                 'User-Agent': UA,
-                'Accept': binary ? '*/*' : 'text/html,application/xhtml+xml',
-                'Accept-Language': 'bg,en;q=0.9',
+                'Accept': binary ? '*/*' : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'bg,en-US;q=0.7,en;q=0.3',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Referer': baseUrl + '/',
+                'Upgrade-Insecure-Requests': '1',
             };
             if (cookies) {
                 headers['Cookie'] = cookies;
