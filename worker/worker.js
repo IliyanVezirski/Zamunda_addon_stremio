@@ -83,6 +83,11 @@ export default {
                 'Accept-Encoding': 'gzip, deflate, br',
                 'Referer': baseUrl + '/',
                 'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'same-origin',
+                'Sec-Fetch-User': '?1',
+                'DNT': '1',
             };
             if (cookies) {
                 headers['Cookie'] = cookies;
@@ -110,8 +115,9 @@ export default {
                 headers: {
                     ...corsHeaders,
                     'Content-Type': 'text/html; charset=utf-8',
-                    'X-Worker-Version': '2.2.1',
+                    'X-Worker-Version': '2.2.3',
                     'X-Worker-Path': (path || '').substring(0, 100),
+                    'X-Worker-Colo': request.cf?.colo || 'unknown',
                 }
             });
         } catch (e) {
