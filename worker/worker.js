@@ -176,6 +176,7 @@ async function handleLogin(url, baseUrl, targetKey, corsHeaders) {
 
         const response = await fetch(loginUrl, {
             method: 'POST',
+            body,
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'User-Agent': UA,

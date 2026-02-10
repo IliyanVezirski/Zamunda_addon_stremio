@@ -151,13 +151,14 @@ app.post('/api/axel-login', async (req, res) => {
         const { WORKER_URL } = require('./lib/sessionManager');
         const workerLoginUrl = `${WORKER_URL}/login?target=axelbg.net&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
         console.log(`[Axel Login] Via Worker: ${WORKER_URL}/login?target=axelbg.net`);
-        const loginRes = await axios.get(workerLoginUrl, { timeout: 20000 });
+        const loginRes = await axios.get(workerLoginUrl, { timeout: 20000, validateStatus: () => true });
         const data = loginRes.data;
+        console.log(`[Axel Login] Worker response:`, JSON.stringify(data).substring(0, 500));
         if (data.uid && data.pass) {
             console.log(`[Axel Login] Success via Worker: uid=${data.uid}`);
             res.json({ uid: data.uid, pass: data.pass });
         } else {
-            console.log('[Axel Login] Failed via Worker:', data.error || 'no cookies');
+            console.log('[Axel Login] Failed via Worker:', JSON.stringify(data));
             res.json({ error: data.error || 'Грешно потребителско име или парола' });
         }
     } catch (e) {
