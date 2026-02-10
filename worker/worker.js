@@ -144,7 +144,7 @@ export default {
                 headers: {
                     ...corsHeaders,
                     'Content-Type': 'text/html; charset=utf-8',
-                    'X-Worker-Version': '2.2.3',
+                    'X-Worker-Version': '2.3.0',
                     'X-Worker-Path': (path || '').substring(0, 100),
                     'X-Worker-Colo': request.cf?.colo || 'unknown',
                 }
