@@ -73,6 +73,9 @@ export default {
 
         try {
             const targetUrl = baseUrl + path;
+            console.log(`[Worker] targetUrl: ${targetUrl.substring(0, 150)}`);
+            console.log(`[Worker] path: ${path.substring(0, 100)}`);
+            console.log(`[Worker] cookies: ${cookies.substring(0, 50)}`);
             const headers = {
                 'User-Agent': UA,
                 'Accept': binary ? '*/*' : 'text/html,application/xhtml+xml',
@@ -104,6 +107,8 @@ export default {
                 headers: {
                     ...corsHeaders,
                     'Content-Type': 'text/html; charset=utf-8',
+                    'X-Worker-Version': '2.2.1',
+                    'X-Worker-Path': (path || '').substring(0, 100),
                 }
             });
         } catch (e) {
