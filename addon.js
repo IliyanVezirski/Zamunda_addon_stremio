@@ -140,7 +140,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// AXELbg login endpoint — accepts username/password, returns uid/pass cookies
+// AXELbg login endpoint — routes through Cloudflare Worker
 app.post('/api/axel-login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -148,30 +148,16 @@ app.post('/api/axel-login', async (req, res) => {
     }
     try {
         const axios = require('axios');
-        const loginBody = `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
-        const loginRes = await axios.post('https://axelbg.net/takelogin.php', loginBody, {
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-            },
-            maxRedirects: 0,
-            validateStatus: s => s >= 200 && s < 400,
-            timeout: 10000
-        });
-        const cookies = loginRes.headers['set-cookie'] || [];
-        let uid = '', pass = '';
-        for (const c of cookies) {
-            const uidMatch = c.match(/uid=(\d+)/);
-            const passMatch = c.match(/pass=([a-f0-9]+)/);
-            if (uidMatch) uid = uidMatch[1];
-            if (passMatch) pass = passMatch[1];
-        }
-        if (uid && pass) {
-            console.log(`[Axel Login] Success: uid=${uid}`);
-            res.json({ uid, pass });
+        const { WORKER_URL } = require('./lib/sessionManager');
+        const loginUrl = `${WORKER_URL}/login?target=axelbg.net&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+        const loginRes = await axios.get(loginUrl, { timeout: 15000 });
+        const data = loginRes.data;
+        if (data.uid && data.pass) {
+            console.log(`[Axel Login] Success via Worker: uid=${data.uid}`);
+            res.json({ uid: data.uid, pass: data.pass });
         } else {
-            console.log('[Axel Login] Failed — no cookies');
-            res.json({ error: 'Wrong username or password' });
+            console.log('[Axel Login] Failed:', data.error || 'no cookies');
+            res.json({ error: data.error || 'Wrong username or password' });
         }
     } catch (e) {
         console.error('[Axel Login] Error:', e.message);
