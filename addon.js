@@ -12,13 +12,8 @@ const manifest = {
     version: '2.2.3',
     name: 'BGTorrents',
     // Описанието обяснява на потребителя кой линк за какво е
-    description: 'Торенти от Zamunda.rip + AXELbg.\n\n🎬 За БГ СУБТИТРИ кликнете на линка най-долу (Contact).\n\n☕ За ПОДКРЕПА кликнете на бутона "Help".\n\nИзползването е на ваша отговорност.',
+    description: 'Торенти от Zamunda.rip + AXELbg.',
     
-    // Този бутон в Stremio винаги е кликаем и ще отваря страницата за подкрепа
-    helpUrl: 'https://bit.ly/support_zamunda_addon', 
-
-    // Stremio показва това като кликаем линк най-отдолу в полето "Contact"
-    contactEmail: 'https://bit.ly/bgsubs',
 
     logo: `${process.env.RENDER_EXTERNAL_URL || 'https://zamunda-addon-stremio.onrender.com'}/static/logo.png`,
     resources: ['stream'],
