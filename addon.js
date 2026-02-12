@@ -143,7 +143,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// AXELbg login endpoint — via BG SOCKS proxy (Render IP blocked, Worker FRA gives SQL Error)
+// AXELbg login endpoint — via Webshare proxy (Render IP blocked, Worker FRA gives SQL Error)
 app.post('/api/axel-login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -151,49 +151,46 @@ app.post('/api/axel-login', async (req, res) => {
     }
     try {
         const axios = require('axios');
-        const { SocksProxyAgent } = require('socks-proxy-agent');
+        const { HttpsProxyAgent } = require('https-proxy-agent');
+        const WEBSHARE_TOKEN = process.env.WEBSHARE_TOKEN || '2ouegurhzca7f2gtyff2xrcky7xy5upo4us63y7c';
 
-        // Fetch fresh BG proxies
-        const BG_PROXY_URL = 'https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/countries/BG/data.json';
-        const proxyList = (await axios.get(BG_PROXY_URL, { timeout: 10000 })).data || [];
-        const proxies = proxyList.filter(p => p.protocol === 'socks5' || p.protocol === 'socks4');
-        console.log(`[Axel Login] Got ${proxies.length} BG proxies`);
+        // Get Webshare proxy
+        const proxyRes = await axios.get('https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page=1&page_size=10', {
+            headers: { 'Authorization': `Token ${WEBSHARE_TOKEN}` }, timeout: 10000
+        });
+        const proxies = proxyRes.data?.results || [];
+        const eu = proxies.find(p => ['GB','ES','DE','FR','NL','IT','PL','RO','BG'].includes(p.country_code));
+        const proxy = eu || proxies[0];
+        if (!proxy) return res.json({ error: 'No proxy available' });
 
+        const agent = new HttpsProxyAgent(`http://${proxy.username}:${proxy.password}@${proxy.proxy_address}:${proxy.port}`);
+        console.log(`[Axel Login] Via Webshare ${proxy.proxy_address} (${proxy.country_code})`);
+
+        const loginRes = await axios.post('https://axelbg.net/takelogin.php',
+            `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {
+            httpAgent: agent, httpsAgent: agent,
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+            },
+            maxRedirects: 0,
+            validateStatus: s => s >= 200 && s < 400,
+            timeout: 15000
+        });
+        const cookies = loginRes.headers['set-cookie'] || [];
         let uid = '', pass = '';
-        for (const proxy of proxies) {
-            try {
-                const agent = new SocksProxyAgent(`${proxy.protocol}://${proxy.ip}:${proxy.port}`);
-                console.log(`[Axel Login] Trying proxy ${proxy.ip}:${proxy.port}...`);
-                const loginRes = await axios.post('https://axelbg.net/takelogin.php',
-                    `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {
-                    httpAgent: agent, httpsAgent: agent,
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-                    },
-                    maxRedirects: 0,
-                    validateStatus: s => s >= 200 && s < 400,
-                    timeout: 15000
-                });
-                const cookies = loginRes.headers['set-cookie'] || [];
-                for (const c of cookies) {
-                    const u = c.match(/uid=(\d+)/);
-                    const p = c.match(/pass=([a-f0-9]{32})/i);
-                    if (u) uid = u[1];
-                    if (p) pass = p[1];
-                }
-                if (uid && pass) break;
-                console.log(`[Axel Login] Proxy ${proxy.ip}: no cookies`);
-            } catch (e) {
-                console.log(`[Axel Login] Proxy ${proxy.ip} error: ${e.message}`);
-            }
+        for (const c of cookies) {
+            const u = c.match(/uid=(\d+)/);
+            const p = c.match(/pass=([a-f0-9]{32})/i);
+            if (u) uid = u[1];
+            if (p) pass = p[1];
         }
         if (uid && pass) {
-            console.log(`[Axel Login] Success via BG proxy: uid=${uid}`);
+            console.log(`[Axel Login] Success: uid=${uid}`);
             res.json({ uid, pass });
         } else {
-            console.log('[Axel Login] Failed — all proxies failed or wrong credentials');
-            res.json({ error: 'Грешно потребителско име или парола (или няма BG proxy)' });
+            console.log('[Axel Login] Failed — no cookies returned');
+            res.json({ error: 'Грешно потребителско име или парола' });
         }
     } catch (e) {
         console.error('[Axel Login] Error:', e.message);
