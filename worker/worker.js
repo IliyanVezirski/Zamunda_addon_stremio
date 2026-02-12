@@ -90,36 +90,15 @@ export default {
                 'DNT': '1',
             };
             if (cookies) {
-                headers['Cookie'] = cookies;
-            }
-
-            // Warm-up: visit index.php first to update lastip and init session
-            // This fixes SQL Error on non-SOF edges where $CURUSER doesn't load
-            if (targetKey === 'axelbg.net' && !binary && cookies) {
-                console.log('[Worker] Warm-up: visiting index.php to init session...');
-                const warmup = await fetch(baseUrl + '/index.php', {
-                    headers: { ...headers },
-                    redirect: 'follow',
-                });
-                // Extract any session cookies from warm-up response
-                const setCookies = warmup.headers.get('set-cookie') || '';
-                if (setCookies) {
-                    // Merge session cookies with auth cookies
-                    const sessionCookies = [];
-                    const cookieParts = setCookies.split(/,\s*(?=[a-zA-Z_]+=)/);
-                    for (const part of cookieParts) {
-                        const nameVal = part.split(';')[0].trim();
-                        if (nameVal && !nameVal.startsWith('uid=') && !nameVal.startsWith('pass=')) {
-                            sessionCookies.push(nameVal);
-                        }
-                    }
-                    if (sessionCookies.length > 0) {
-                        headers['Cookie'] = cookies + '; ' + sessionCookies.join('; ');
-                        console.log(`[Worker] Merged session cookies: ${sessionCookies.join('; ').substring(0, 80)}`);
-                    }
+                // For axelbg.net: inject pagination cookies to fix SQL Error
+                // bittorrent.php reads $first/$last from cookies; without them they become
+                // literal strings "first"/"last" in SQL on non-SOF CF edges
+                if (targetKey === 'axelbg.net') {
+                    headers['Cookie'] = cookies + '; torrentsperpage=50; first=0; last=50; page=0';
+                    console.log(`[Worker] axelbg cookies: ${headers['Cookie'].substring(0, 100)}`);
+                } else {
+                    headers['Cookie'] = cookies;
                 }
-                await warmup.text(); // consume body
-                console.log(`[Worker] Warm-up done, status=${warmup.status}`);
             }
 
             const response = await fetch(targetUrl, {
@@ -144,7 +123,7 @@ export default {
                 headers: {
                     ...corsHeaders,
                     'Content-Type': 'text/html; charset=utf-8',
-                    'X-Worker-Version': '2.3.1',
+                    'X-Worker-Version': '2.4.0',
                     'X-Worker-Path': (path || '').substring(0, 100),
                     'X-Worker-Colo': request.cf?.colo || 'unknown',
                 }
