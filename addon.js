@@ -9,10 +9,10 @@ const { getMetaFromImdb, parseSeriesId, formatEpisode, sanitizeSearchQuery } = r
 
 const manifest = {
     id: 'org.zamunda.stremio.addon',
-    version: '2.2.2',
+    version: '2.2.3',
     name: 'BGTorrents',
-    description: 'Торенти от Zamunda.rip + AXELbg за Stremio. Използването е на ваша отговорност.',
-    // КЛЮЧЪТ: Това добавя кликаем бутон "Help" или "Donate" в Stremio
+    // Добавяме линка за субтитрите директно в описанието
+    description: 'Торенти от Zamunda.rip + AXELbg.\n\n🎬 БГ СУБТИТРИ: https://stremio-addons.net/addons/bg-subs-subsunacs-subssab \n\nИзползването е на ваша отговорност.',
     helpUrl: 'https://www.buymeacoffee.com/Bgsubs', 
     logo: `${process.env.RENDER_EXTERNAL_URL || 'https://zamunda-addon-stremio.onrender.com'}/static/logo.png`,
     resources: ['stream'],
