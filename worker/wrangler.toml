@@ -3,4 +3,4 @@ main = "worker.js"
 compatibility_date = "2024-01-01"
 
 [placement]
-hostname = "axelbg.net"
+host = "91.219.236.160:443"
