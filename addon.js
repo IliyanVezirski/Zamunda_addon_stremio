@@ -12,7 +12,7 @@ const manifest = {
     version: '2.2.3',
     name: 'BGTorrents',
     // Добавяме линка за субтитрите директно в описанието
-    description: 'Торенти от Zamunda.rip + AXELbg.\n\n🎬 БГ СУБТИТРИ: https://bit.ly/bgsubs \n\nИзползването е на ваша отговорност.',
+    description: 'Торенти от Zamunda.rip + AXELbg.\n\n🎬 БГ СУБТИТРИ: https://bit.ly/bgsubs \n\nИзползването е на ваша отговорност.\n\nПодрепете адона: https://bit.ly/support_zamunda_addon',
     helpUrl: 'https://www.buymeacoffee.com/Bgsubs', 
     logo: `${process.env.RENDER_EXTERNAL_URL || 'https://zamunda-addon-stremio.onrender.com'}/static/logo.png`,
     resources: ['stream'],
