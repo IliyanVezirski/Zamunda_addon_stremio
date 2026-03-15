@@ -4,17 +4,15 @@ const { addonBuilder, getRouter } = require('stremio-addon-sdk');
 
 // const { getStreams: getZamundaStreams } = require('./lib/zamundaService'); // zamunda.ch — не работи в момента
 const { getStreams: getRipStreams } = require('./lib/zamundaRipService');
-const { getStreams: getAxelStreams } = require('./lib/axelService');
+const { getStreams: getBultorStreams } = require('./lib/bultorService');
 const { getMetaFromImdb, parseSeriesId, formatEpisode, sanitizeSearchQuery } = require('./lib/utils');
 
 const manifest = {
     id: 'org.zamunda.stremio.addon',
-    version: '2.3.0',
+    version: '2.5.0',
     name: 'BGTorrents',
-    // Описанието обяснява на потребителя кой линк за какво е
-    description: 'Торенти от Zamunda.rip + AXELbg.',
+    description: 'Торенти от Zamunda.rip + Bultor.net - български торент сайтове с българско озвучаване',
     
-
     logo: `${process.env.RENDER_EXTERNAL_URL || 'https://zamunda-addon-stremio.onrender.com'}/static/logo.png`,
     resources: ['stream'],
     types: ['movie', 'series'],
@@ -24,17 +22,7 @@ const manifest = {
         {
             key: 'providers',
             type: 'text',
-            title: 'Източници (rip,axel)'
-        },
-        {
-            key: 'axel_uid',
-            type: 'text',
-            title: 'AXELbg UID'
-        },
-        {
-            key: 'axel_pass',
-            type: 'text',
-            title: 'AXELbg Pass'
+            title: 'Източници (rip,bultor)'
         }
     ],
     behaviorHints: {
@@ -51,11 +39,9 @@ builder.defineStreamHandler(async ({ type, id, config }) => {
     console.log(`[Stream] type=${type} id=${id}`);
 
     // Providers: from config URL or env vars
-    const enabledProviders = (config?.providers || process.env.PROVIDERS || 'rip').split(',').map(s => s.trim());
+    const enabledProviders = (config?.providers || process.env.PROVIDERS || 'rip,bultor').split(',').map(s => s.trim());
     const useRip = enabledProviders.includes('rip');
-    const axelUid = config?.axel_uid || process.env.AXEL_UID || '';
-    const axelPass = config?.axel_pass || process.env.AXEL_PASS || '';
-    const useAxel = enabledProviders.includes('axel') && axelUid && axelPass;
+    const useBultor = enabledProviders.includes('bultor');
 
     try {
         let searchQuery = '';
@@ -93,9 +79,11 @@ builder.defineStreamHandler(async ({ type, id, config }) => {
 
         // Run enabled providers in parallel
         const promises = [];
+        const providerOrder = [];
 
         // 1. Zamunda.rip (no login needed)
         if (useRip) {
+            providerOrder.push('rip');
             promises.push(
                 (async () => {
                     let streams = await getRipStreams(searchQuery, type, filter);
@@ -111,11 +99,16 @@ builder.defineStreamHandler(async ({ type, id, config }) => {
             );
         }
 
-        // 2. AXELbg (needs credentials)
-        if (useAxel) {
+        // 2. Bultor (no login needed)
+        if (useBultor) {
+            providerOrder.push('bultor');
             promises.push(
-                getAxelStreams(axelUid, axelPass, imdbId, type, filter)
-                    .catch(e => { console.error('[Stream] Axel error:', e.message); return []; })
+                (async () => {
+                    // Always search by just the name - filtering happens in the service
+                    const bultorQuery = sanitizeSearchQuery(meta.name);
+                    let streams = await getBultorStreams(bultorQuery, type, filter);
+                    return streams;
+                })().catch(e => { console.error('[Stream] Bultor error:', e.message); return []; })
             );
         }
 
@@ -130,7 +123,11 @@ builder.defineStreamHandler(async ({ type, id, config }) => {
             return true;
         });
 
-        console.log(`[Stream] Found ${unique.length} streams (${results[0]?.length || 0} rip + ${results[1]?.length || 0} axel)`);
+        const ripIdx = providerOrder.indexOf('rip');
+        const bultorIdx = providerOrder.indexOf('bultor');
+        const ripCount = ripIdx >= 0 ? (results[ripIdx]?.length || 0) : 0;
+        const bultorCount = bultorIdx >= 0 ? (results[bultorIdx]?.length || 0) : 0;
+        console.log(`[Stream] Found ${unique.length} streams (${ripCount} rip + ${bultorCount} bultor)`);
         return { streams: unique };
     } catch (error) {
         console.error(`[Stream] Error:`, error.message);
@@ -284,8 +281,8 @@ function getConfigurePage() {
 <body>
     <div class="container">
         <div class="logo"><img src="/static/logo.png" alt="BGTorrents"></div>
-        <h1>BGTorrents Addon</h1>
-        <p class="subtitle">BG \u0442\u043e\u0440\u0435\u043d\u0442\u0438 \u0437\u0430 Stremio</p>
+        <h1>BGTorrents</h1>
+        <p class="subtitle">\u0411\u044a\u043b\u0433\u0430\u0440\u0441\u043a\u0438 \u0442\u043e\u0440\u0435\u043d\u0442\u0438 \u0437\u0430 Stremio</p>
         <p style="color:#aaa; text-align:center; font-size:12px; margin:12px 0 8px;">\u0410\u043a\u043e \u0438\u0441\u043a\u0430\u0442\u0435 \u0431\u044a\u043b\u0433\u0430\u0440\u0441\u043a\u0438 \u0441\u0443\u0431\u0442\u0438\u0442\u0440\u0438 \u043c\u043e\u0436\u0435\u0442\u0435 \u0434\u0430 \u0434\u043e\u0431\u0430\u0432\u0438\u0442\u0435 \u0438 \u0442\u043e\u0437\u0438 \u0430\u0434\u0434\u043e\u043d</p>
         <a href="https://bit.ly/bgsubs" target="_blank" style="display:block; text-align:center; margin:0 0 20px; padding:12px 20px; background:linear-gradient(135deg,#4ade80 0%,#22c55e 100%); color:#1a1a2e; text-decoration:none; border-radius:10px; font-weight:bold; font-size:14px; transition:transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">\u0411\u044a\u043b\u0433\u0430\u0440\u0441\u043a\u0438 \u0441\u0443\u0431\u0442\u0438\u0442\u0440\u0438</a>
         
@@ -297,39 +294,20 @@ function getConfigurePage() {
                 <div>
                     <span style="color:#fff; font-weight:bold;">Zamunda.rip</span>
                     <span style="color:#4ade80; font-size:12px; margin-left:6px;">\u0431\u0435\u0437 \u043b\u043e\u0433\u0438\u043d</span>
-                    <br><span style="color:#888; font-size:11px;">\u0410\u0440\u0445\u0438\u0432 \u043d\u0430 Zamunda + ArenaBG (400k+ \u0442\u043e\u0440\u0435\u043d\u0442\u0430)</span>
+                    <br><span style="color:#888; font-size:11px;">\u0410\u0440\u0445\u0438\u0432 \u043d\u0430 Zamunda + ArenaBG</span>
                 </div>
             </label>
             
             <label style="display:flex; align-items:center; gap:10px; padding:12px; background:rgba(255,255,255,0.05); border-radius:10px; margin-bottom:10px; cursor:pointer;">
-                <input type="checkbox" id="cbAxel" onchange="toggleAxelFields()" style="width:18px; height:18px; accent-color:#667eea;">
+                <input type="checkbox" id="cbBultor" checked style="width:18px; height:18px; accent-color:#667eea;">
                 <div>
-                    <span style="color:#fff; font-weight:bold;">AXELbg.net</span>
-                    <span style="color:#f5a623; font-size:12px; margin-left:6px;">\u0438\u0437\u0438\u0441\u043a\u0432\u0430 \u0430\u043a\u0430\u0443\u043d\u0442</span>
-                    <br><span style="color:#888; font-size:11px;">\u0411\u044a\u043b\u0433\u0430\u0440\u0441\u043a\u0438 \u0442\u0440\u0430\u043a\u0435\u0440 \u0441 \u0430\u043a\u0442\u0438\u0432\u043d\u0438 seeders</span>
+                    <span style="color:#fff; font-weight:bold;">Bultor.net</span>
+                    <span style="color:#4ade80; font-size:12px; margin-left:6px;">\u0431\u0435\u0437 \u043b\u043e\u0433\u0438\u043d</span>
+                    <br><span style="color:#888; font-size:11px;">\u0411\u044a\u043b\u0433\u0430\u0440\u0441\u043a\u0438 \u0442\u043e\u0440\u0435\u043d\u0442 \u0441 \u0431\u043e\u043b\u0433\u0430\u0440\u0441\u043a\u043e \u043e\u0437\u0432\u0443\u0447\u0430\u043d\u0435</span>
                 </div>
             </label>
             
-            <div id="axelFields" style="display:none; margin-bottom:14px; padding-left:28px;">
-                <div class="form-group">
-                <label for="axelUsername" style="display:block; margin-bottom:5px; font-weight:500;">Потребителско име:</label>
-            <input type="text" id="axelUsername" placeholder="username" style="width:100%; padding:10px; border:1px solid #444; border-radius:6px; background:#2a2a3e; color:#fff; font-size:14px; margin-bottom:12px;">
-            
-            <label for="axelPassword" style="display:block; margin-bottom:5px; font-weight:500;">Парола:</label>
-            <input type="password" id="axelPassword" placeholder="••••••••" style="width:100%; padding:10px; border:1px solid #444; border-radius:6px; background:#2a2a3e; color:#fff; font-size:14px;">
-                </div>
-            </div>
-            
-            <label style="display:flex; align-items:center; gap:10px; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px; margin-bottom:14px; cursor:not-allowed; opacity:0.4;">
-                <input type="checkbox" disabled style="width:18px; height:18px;">
-                <div>
-                    <span style="color:#888; font-weight:bold;">Zamunda.ch</span>
-                    <span style="color:#ff6b6b; font-size:12px; margin-left:6px;">\u26a0\ufe0f \u041d\u0415 \u0420\u0410\u0411\u041e\u0422\u0418</span>
-                    <br><span style="color:#666; font-size:11px;">\u0429\u0435 \u0431\u044a\u0434\u0435 \u0432\u044a\u0437\u0441\u0442\u0430\u043d\u043e\u0432\u0435\u043d \u043a\u043e\u0433\u0430\u0442\u043e \u0441\u044a\u0440\u0432\u044a\u0440\u044a\u0442 \u0437\u0430\u0440\u0430\u0431\u043e\u0442\u0438</span>
-                </div>
-            </label>
-            
-            <button id="installBtn" onclick="doInstall()">\u0412\u0445\u043e\u0434 \u0438 \u0438\u043d\u0441\u0442\u0430\u043b\u0430\u0446\u0438\u044f</button>
+            <button id="installBtn" onclick="doInstall()">\u0418\u043d\u0441\u0442\u0430\u043b\u0430\u0446\u0438\u044f</button>
         </div>
 
         <div class="status" id="status"></div>
@@ -344,16 +322,11 @@ function getConfigurePage() {
         </div>
         
         <p class="info">\u0414\u0430\u043d\u043d\u0438\u0442\u0435 \u0441\u0435 \u0438\u0437\u043f\u043e\u043b\u0437\u0432\u0430\u0442 \u0441\u0430\u043c\u043e \u0437\u0430 \u0432\u0445\u043e\u0434 \u0438 \u043d\u0435 \u0441\u0435 \u0441\u044a\u0445\u0440\u0430\u043d\u044f\u0432\u0430\u0442 \u043d\u0430 \u0441\u044a\u0440\u0432\u044a\u0440\u0430.</p>
-        <a href="https://bit.ly/support_zamunda" target="_blank" style="display:block; text-align:center; margin-top:10px; padding:12px 20px; background:linear-gradient(135deg,#ffdd00 0%,#f5a623 100%); color:#1a1a2e; text-decoration:none; border-radius:10px; font-weight:bold; font-size:14px; transition:transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">\u2615 \u041f\u043e\u0434\u043a\u0440\u0435\u043f\u0435\u0442\u0435 \u043f\u0440\u043e\u0435\u043a\u0442\u0430</a>
+        <a href="https://buymeacoffee.com/Bgsubs" target="_blank" style="display:block; text-align:center; margin-top:10px; padding:12px 20px; background:linear-gradient(135deg,#ffdd00 0%,#f5a623 100%); color:#1a1a2e; text-decoration:none; border-radius:10px; font-weight:bold; font-size:14px; transition:transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">☕ Подкрепете проекта</a>
     </div>
 
     <script>
         const BASE_URL = '${baseUrl}';
-        
-        function toggleAxelFields() {
-            document.getElementById('axelFields').style.display = 
-                document.getElementById('cbAxel').checked ? 'block' : 'none';
-        }
         
         function showStatus(msg, type) {
             const el = document.getElementById('status');
@@ -364,7 +337,7 @@ function getConfigurePage() {
         async function doInstall() {
             const providers = [];
             if (document.getElementById('cbRip').checked) providers.push('rip');
-            if (document.getElementById('cbAxel').checked) providers.push('axel');
+            if (document.getElementById('cbBultor').checked) providers.push('bultor');
             
             if (providers.length === 0) {
                 showStatus('\u0418\u0437\u0431\u0435\u0440\u0438 \u043f\u043e\u043d\u0435 \u0435\u0434\u0438\u043d \u0438\u0437\u0442\u043e\u0447\u043d\u0438\u043a!', 'error');
@@ -374,44 +347,9 @@ function getConfigurePage() {
             const cfg = { providers: providers.join(',') };
             const btn = document.getElementById('installBtn');
             
-            // If AXELbg is checked, login to get cookies
-            if (providers.includes('axel')) {
-                const username = document.getElementById('axelUsername').value.trim();
-                const password = document.getElementById('axelPassword').value.trim();
-                if (!username || !password) {
-                    showStatus('Въведи потребителско име и парола за AXELbg!', 'error');
-                    return;
-                }
-                
-                btn.disabled = true;
-                btn.textContent = 'Вход...';
-                showStatus('Влизане в AXELbg... Моля изчакай.', 'loading');
-                
-                try {
-                    const res = await fetch(BASE_URL + '/api/axel-login', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username, password })
-                    });
-                    const data = await res.json();
-                    
-                    if (data.uid && data.pass) {
-                        showStatus('Успешен вход в AXELbg!', 'success');
-                        cfg.axel_uid = data.uid;
-                        cfg.axel_pass = data.pass;
-                    } else {
-                        showStatus(data.error || 'Грешно име или парола', 'error');
-                        btn.disabled = false;
-                        btn.textContent = 'Вход и инсталация';
-                        return;
-                    }
-                } catch (e) {
-                    showStatus('Грешка: ' + e.message, 'error');
-                    btn.disabled = false;
-                    btn.textContent = 'Вход и инсталация';
-                    return;
-                }
-            }
+            btn.disabled = true;
+            btn.textContent = '\u0417\u0430\u0440\u0435\u0436\u0434\u0430\u043d\u0435...';
+            showStatus('\u041f\u043e\u0434\u0433\u043e\u0442\u0432\u044f \u043b\u0438\u043d\u043a...', 'loading');
             
             const config = encodeURIComponent(JSON.stringify(cfg));
             const manifestUrl = BASE_URL + '/' + config + '/manifest.json';
